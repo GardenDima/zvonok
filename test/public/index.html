@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    video {
+      width: 45%;
+      border-radius: 10px;
+      margin: 10px;
+      background: #000;
+    }
+    body { text-align: center; font-family: sans-serif; }
+    button { padding: 10px 20px; margin: 10px; }
+  </style>
+</head>
+<body>
+  <h1>звонок</h1>
+  <video id="localVideo" autoplay playsinline muted></video>
+  <video id="remoteVideo" autoplay playsinline></video>
+  <br>
+  <button id="startBtn">Конект</button>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script>
+    const socket = io();
+    const pc = new RTCPeerConnection();
+
+    const localVideo = document.getElementById("localVideo");
+    const remoteVideo = document.getElementById("remoteVideo");
+    const startBtn = document.getElementById("startBtn");
+
+    pc.ontrack = (event) => {
+      remoteVideo.srcObject = event.streams[0];
+    };
+
+    socket.on("offer", async (offer) => {
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("answer", answer);
+    });
+
+    socket.on("answer", async (answer) => {
+      await pc.setRemoteDescription(answer);
+    });
+
+    socket.on("candidate", async (candidate) => {
+      try {
+        await pc.addIceCandidate(candidate);
+      } catch (err) {
+        console.error("Ошибка добавления ICE кандидата", err);
+      }
+    });
+
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("candidate", event.candidate);
+      }
+    };
+
+    startBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      localVideo.srcObject = stream;
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("offer", offer);
+    };
+  </script>
+</body>
+</html>
